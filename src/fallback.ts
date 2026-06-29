@@ -113,10 +113,10 @@ interface StepFailure {
  *
  * Advancement rules (when does it move to the next step?):
  *   - Missing API key        → silently skip (non-fatal, logged in AggregateError)
- *   - HTTP 429 or 5xx       → advance to next step
+ *   - Any HTTP error (4xx/5xx) → advance to next step (revoked key, stale model,
+ *                                or overload on one provider routes to the next)
  *   - Network / fetch error  → advance to next step
  *   - AbortError             → re-throw immediately (caller cancelled)
- *   - Non-retryable HTTP 4xx → throw immediately (misconfiguration, bad request)
  *   - All steps fail/skip    → throw AggregateError listing every step's reason
  *
  * @example
@@ -177,18 +177,18 @@ export async function runWithFallback(
         body = await response.text().catch(() => '(unreadable body)');
       }
 
-      if (isRetryableStatus(response.status)) {
-        failures.push({
-          step,
-          reason: `HTTP ${response.status}: ${JSON.stringify(body).slice(0, 300)}`,
-        });
-        continue;
-      }
-
-      // Non-retryable — propagate so the caller can fix the root cause
-      throw new Error(
-        `[${step.provider}/${step.model}] HTTP ${response.status}: ${JSON.stringify(body).slice(0, 300)}`,
-      );
+      // Advance on ANY HTTP error. This is a resilience chain: a revoked key
+      // (401), stale model (404), or per-provider bad-request (400) on one
+      // provider should route to the next, not kill the whole request. A
+      // request malformed for every provider simply exhausts the chain and
+      // surfaces all reasons via the AggregateError below. isRetryableStatus
+      // only annotates the reason (transient vs config) for debuggability.
+      const kind = isRetryableStatus(response.status) ? 'transient' : 'config';
+      failures.push({
+        step,
+        reason: `HTTP ${response.status} (${kind}): ${JSON.stringify(body).slice(0, 300)}`,
+      });
+      continue;
     }
 
     const data = (await response.json()) as unknown;

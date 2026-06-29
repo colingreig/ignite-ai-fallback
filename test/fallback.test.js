@@ -263,12 +263,37 @@ describe('runWithFallback — total failure', () => {
     assert.ok(caught.message.includes('openai'), 'should mention openai in message');
   });
 
-  it('propagates non-retryable 4xx immediately (does not advance)', async () => {
+  it('advances past a non-retryable 4xx (revoked key on primary routes to next)', async () => {
     let callCount = 0;
-    const fetchImpl = async () => {
+    const fetchImpl = async (url) => {
       callCount++;
-      return jsonResponse({ error: 'invalid_api_key' }, 401);
+      // Primary (anthropic) returns 401 — a revoked/invalid key. A resilience
+      // chain must route around it, not kill the request.
+      if (url.includes('anthropic') || url.includes('api.anthropic')) {
+        return jsonResponse({ error: 'invalid_api_key' }, 401);
+      }
+      return jsonResponse(
+        { choices: [{ message: { content: 'served by openai' } }] },
+        200,
+      );
     };
+
+    const result = await runWithFallback(
+      [
+        { provider: 'anthropic', model: 'claude-haiku' },
+        { provider: 'openai', model: 'gpt-4o' },
+      ],
+      makeRequest(),
+      { keys: { anthropic: 'k1', openai: 'k2' }, fetchImpl },
+    );
+
+    assert.equal(callCount, 2, 'Should advance past the 401 to the next provider');
+    assert.equal(result.provider, 'openai');
+    assert.equal(result.text, 'served by openai');
+  });
+
+  it('throws AggregateError when every step fails with a 4xx', async () => {
+    const fetchImpl = async () => jsonResponse({ error: 'invalid_api_key' }, 401);
 
     await assert.rejects(
       () =>
@@ -281,13 +306,11 @@ describe('runWithFallback — total failure', () => {
           { keys: { anthropic: 'k1', openai: 'k2' }, fetchImpl },
         ),
       (err) => {
-        // Should be a plain Error, not AggregateError
-        assert.ok(!(err instanceof AggregateError), 'Should NOT be AggregateError for 401');
+        assert.ok(err instanceof AggregateError, 'Should be AggregateError when chain exhausts');
         assert.ok(err.message.includes('401'), err.message);
         return true;
       },
     );
-    assert.equal(callCount, 1, 'Should stop at first non-retryable error');
   });
 
   it('re-throws AbortError immediately without advancing', async () => {
