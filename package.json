@@ -1,0 +1,40 @@
+{
+  "name": "@ignite/ai-fallback",
+  "version": "0.1.0",
+  "description": "Fetch-based LLM provider fallback for Node.js, Cloudflare Workers, Deno, and .mjs scripts. Zero runtime dependencies.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test test/fallback.test.js test/adapters.test.js test/keys.test.js",
+    "test:all": "npm run build && npm run test"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "llm",
+    "anthropic",
+    "openai",
+    "gemini",
+    "fallback",
+    "cloudflare-workers",
+    "deno",
+    "edge"
+  ],
+  "license": "MIT"
+}
