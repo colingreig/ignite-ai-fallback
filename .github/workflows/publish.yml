@@ -34,4 +34,7 @@ jobs:
           npm install
           npm run test:all
       - name: Publish to JSR
-        run: npx jsr publish
+        # --allow-dirty: `npm install` above writes a package-lock.json (no
+        # committed lockfile, since the package has zero runtime deps), which
+        # otherwise trips jsr's uncommitted-changes guard.
+        run: npx jsr publish --allow-dirty
