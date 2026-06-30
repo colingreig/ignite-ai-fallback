@@ -174,12 +174,53 @@ describe('OpenAI adapter — buildOpenAIRequest', () => {
     assert.equal(body.messages.length, 1);
   });
 
-  it('sets response_format for jsonSchema', () => {
+  it('sets response_format for jsonSchema, normalized to OpenAI strict mode', () => {
     const { init } = buildOpenAIRequest(WITH_SCHEMA, 'gpt-4o', 'k', BASE);
     const body = JSON.parse(init.body);
     assert.equal(body.response_format.type, 'json_schema');
-    assert.deepEqual(body.response_format.json_schema.schema, WITH_SCHEMA.jsonSchema);
+    // strict mode requires additionalProperties: false on every object node,
+    // auto-applied even though WITH_SCHEMA.jsonSchema didn't specify it.
+    assert.deepEqual(body.response_format.json_schema.schema, {
+      type: 'object',
+      properties: { colors: { type: 'array', items: { type: 'string' } } },
+      required: ['colors'],
+      additionalProperties: false,
+    });
     assert.equal(body.response_format.json_schema.strict, true);
+  });
+
+  it('forces required to include every property key (strict mode)', () => {
+    const req = {
+      messages: [{ role: 'user', content: 'x' }],
+      jsonSchema: {
+        type: 'object',
+        properties: {
+          name: { type: ['string', 'null'] },
+          count: { type: 'integer' },
+        },
+        // deliberately incomplete — adapter should still force both keys required
+        required: ['count'],
+      },
+    };
+    const { init } = buildOpenAIRequest(req, 'gpt-4o', 'k', BASE);
+    const body = JSON.parse(init.body);
+    const schema = body.response_format.json_schema.schema;
+    assert.deepEqual(schema.required, ['name', 'count']);
+    assert.equal(schema.additionalProperties, false);
+  });
+
+  it('preserves an explicit additionalProperties value instead of overwriting it', () => {
+    const req = {
+      messages: [{ role: 'user', content: 'x' }],
+      jsonSchema: {
+        type: 'object',
+        properties: { a: { type: 'string' } },
+        additionalProperties: true,
+      },
+    };
+    const { init } = buildOpenAIRequest(req, 'gpt-4o', 'k', BASE);
+    const body = JSON.parse(init.body);
+    assert.equal(body.response_format.json_schema.schema.additionalProperties, true);
   });
 
   it('includes max_tokens, temperature', () => {
@@ -282,11 +323,51 @@ describe('Google adapter — buildGoogleRequest', () => {
     assert.equal(body.generationConfig.temperature, 0.7);
   });
 
-  it('sets responseSchema in generationConfig for jsonSchema', () => {
+  it('sets responseSchema in generationConfig for jsonSchema, translated to Gemini dialect', () => {
     const { init } = buildGoogleRequest(WITH_SCHEMA, 'gemini-2.5-flash', 'k', BASE);
     const body = JSON.parse(init.body);
     assert.equal(body.generationConfig.responseMimeType, 'application/json');
-    assert.deepEqual(body.generationConfig.responseSchema, WITH_SCHEMA.jsonSchema);
+    // Gemini's Schema dialect uses UPPERCASE type enum values, not the
+    // lowercase JSON Schema convention used in the canonical request input.
+    assert.deepEqual(body.generationConfig.responseSchema, {
+      type: 'OBJECT',
+      properties: { colors: { type: 'ARRAY', items: { type: 'STRING' } } },
+      required: ['colors'],
+    });
+  });
+
+  it('converts a type: [T, "null"] union to UPPERCASE type + nullable: true', () => {
+    const req = {
+      messages: [{ role: 'user', content: 'x' }],
+      jsonSchema: {
+        type: 'object',
+        properties: {
+          name: { type: ['string', 'null'], enum: ['a', 'b'] },
+          count: { type: ['integer', 'null'] },
+        },
+        required: ['name', 'count'],
+      },
+    };
+    const { init } = buildGoogleRequest(req, 'gemini-2.5-flash', 'k', BASE);
+    const body = JSON.parse(init.body);
+    const schema = body.generationConfig.responseSchema;
+    assert.deepEqual(schema.properties.name, { type: 'STRING', nullable: true, enum: ['a', 'b'] });
+    assert.deepEqual(schema.properties.count, { type: 'INTEGER', nullable: true });
+  });
+
+  it('drops additionalProperties (Gemini rejects unknown schema keys)', () => {
+    const req = {
+      messages: [{ role: 'user', content: 'x' }],
+      jsonSchema: {
+        type: 'object',
+        properties: { a: { type: 'string' } },
+        required: ['a'],
+        additionalProperties: false,
+      },
+    };
+    const { init } = buildGoogleRequest(req, 'gemini-2.5-flash', 'k', BASE);
+    const body = JSON.parse(init.body);
+    assert.equal(body.generationConfig.responseSchema.additionalProperties, undefined);
   });
 
   it('omits generationConfig when nothing is set', () => {

@@ -35,6 +35,46 @@ function toParts(content: MessageContent): GooglePart[] {
 }
 
 /**
+ * Recursively translates a standard JSON Schema (lowercase types; nullable
+ * fields expressed as `type: [T, "null"]`) into Gemini's `Schema` dialect
+ * (single UPPERCASE `type` string + a separate `nullable: true` boolean).
+ * Gemini's REST endpoint rejects unrecognized fields outright (e.g.
+ * `additionalProperties`), so only the keys Gemini's Schema message actually
+ * supports are carried forward.
+ */
+function toGeminiSchema(schema: unknown): unknown {
+  if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
+    return schema;
+  }
+  const s = schema as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  let type = s['type'];
+  let nullable = s['nullable'] === true;
+  if (Array.isArray(type)) {
+    const nonNull = type.filter((t) => t !== 'null');
+    if (nonNull.length !== type.length) nullable = true;
+    type = nonNull[0];
+  }
+  if (typeof type === 'string') out['type'] = type.toUpperCase();
+  if (nullable) out['nullable'] = true;
+  if (s['description'] !== undefined) out['description'] = s['description'];
+  if (s['format'] !== undefined) out['format'] = s['format'];
+  if (s['enum'] !== undefined) out['enum'] = s['enum'];
+  if (s['items'] !== undefined) out['items'] = toGeminiSchema(s['items']);
+  if (s['properties'] !== undefined && typeof s['properties'] === 'object') {
+    const props: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(s['properties'] as Record<string, unknown>)) {
+      props[k] = toGeminiSchema(v);
+    }
+    out['properties'] = props;
+  }
+  if (s['required'] !== undefined) out['required'] = s['required'];
+
+  return out;
+}
+
+/**
  * Translates a ChatRequest into a Google Gemini generateContent HTTP call.
  *
  * Endpoint: POST {base}/v1beta/models/{model}:generateContent?key={apiKey}
@@ -69,7 +109,7 @@ export function buildGoogleRequest(
   if (request.temperature !== undefined) genConfig['temperature'] = request.temperature;
   if (request.jsonSchema) {
     genConfig['responseMimeType'] = 'application/json';
-    genConfig['responseSchema'] = request.jsonSchema;
+    genConfig['responseSchema'] = toGeminiSchema(request.jsonSchema);
   }
   if (Object.keys(genConfig).length > 0) body['generationConfig'] = genConfig;
 

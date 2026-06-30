@@ -118,11 +118,13 @@ Keys are resolved in this order:
 
 ## JSON Schema / structured output
 
-Pass a JSON Schema object as `request.jsonSchema` and each adapter translates it to the provider's native mechanism:
+Pass a **standard JSON Schema** object as `request.jsonSchema` (lowercase types, e.g. `"object"` / `"string"` / `"integer"`) and each adapter translates it to the provider's native mechanism:
 
-- **Anthropic** — tool-calling (`json_output` tool, `tool_choice: tool`)
-- **OpenAI / zai-glm** — `response_format: { type: 'json_schema', ... }`
-- **Google** — `generationConfig.responseMimeType: 'application/json'` + `responseSchema`
+- **Anthropic** — tool-calling (`json_output` tool, `tool_choice: tool`); schema passed through as-is.
+- **OpenAI / zai-glm** — `response_format: { type: 'json_schema', strict: true, ... }`. The adapter auto-normalizes every object node to satisfy OpenAI's strict-mode requirements: `additionalProperties: false` and `required` listing **every** key in `properties` (don't hand-author these — they're added/overwritten automatically).
+- **Google** — `generationConfig.responseMimeType: 'application/json'` + `responseSchema`, translated into Gemini's `Schema` dialect (UPPERCASE `type` enum values, a separate `nullable: true` boolean instead of a type union, and unsupported keys like `additionalProperties` stripped — Gemini's REST endpoint rejects unrecognized schema fields outright).
+
+**Nullable fields**: write `{ "type": ["string", "null"] }` (a type union), not Gemini's `nullable: true` keyword. Each adapter derives the provider-native nullability encoding from this one convention, so the same schema works whether the step is Gemini, OpenAI, zai-glm, or Anthropic.
 
 `result.text` will contain the JSON string in all cases.
 
