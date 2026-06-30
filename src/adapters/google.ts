@@ -1,12 +1,37 @@
 import type { ChatRequest, ChatResult, Provider, MessageContent } from '../types.js';
 
-function toParts(content: MessageContent): Array<{ text: string }> {
+type GooglePart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
+  | { fileData: { fileUri: string; mimeType?: string } };
+
+// data:<mime>;base64,<data> — used for ImageUrlBlock when the URL is a data URI.
+const DATA_URL_RE = /^data:([^;,]+);base64,(.+)$/s;
+
+/**
+ * Converts normalized ContentBlocks to Gemini `parts`.
+ *   - text             → { text }
+ *   - image (base64)   → { inlineData: { mimeType, data } }
+ *   - image_url (data:)→ { inlineData } (decoded from the data URI)
+ *   - image_url (http) → { fileData: { fileUri } } (best-effort; Gemini natively
+ *     expects Files API URIs here, so an arbitrary public URL may be rejected by
+ *     the API — caller should prefer base64 ImageBlocks for reliable multimodal
+ *     input to Google.)
+ */
+function toParts(content: MessageContent): GooglePart[] {
   if (typeof content === 'string') return [{ text: content }];
-  // Google's generateContent API supports inline images too, but for simplicity
-  // we pass only text parts here; extend if multimodal Google support is needed.
-  return content
-    .filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
-    .map((b) => ({ text: b.text }));
+  return content.map((b): GooglePart => {
+    if (b.type === 'text') return { text: b.text };
+    if (b.type === 'image') {
+      return { inlineData: { mimeType: b.source.media_type, data: b.source.data } };
+    }
+    // image_url
+    const dataMatch = b.image_url.url.match(DATA_URL_RE);
+    if (dataMatch) {
+      return { inlineData: { mimeType: dataMatch[1], data: dataMatch[2] } };
+    }
+    return { fileData: { fileUri: b.image_url.url } };
+  });
 }
 
 /**

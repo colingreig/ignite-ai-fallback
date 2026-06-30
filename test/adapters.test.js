@@ -363,4 +363,57 @@ describe('Multimodal content handling', () => {
     assert.equal(parts[1].source.type, 'base64');
     assert.equal(parts[1].source.media_type, 'image/png');
   });
+
+  it('google adapter converts base64 image blocks to inlineData parts', () => {
+    const req = {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Read this nameplate' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'zzz789' } },
+          ],
+        },
+      ],
+    };
+    const { init } = buildGoogleRequest(req, 'gemini-2.5-flash', 'k', 'https://generativelanguage.googleapis.com');
+    const body = JSON.parse(init.body);
+    const parts = body.contents[0].parts;
+    assert.equal(parts[0].text, 'Read this nameplate');
+    assert.equal(parts[1].inlineData.mimeType, 'image/jpeg');
+    assert.equal(parts[1].inlineData.data, 'zzz789');
+  });
+
+  it('google adapter decodes data: image_url blocks to inlineData parts', () => {
+    const req = {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,YWJj' } },
+          ],
+        },
+      ],
+    };
+    const { init } = buildGoogleRequest(req, 'gemini-2.5-flash', 'k', 'https://generativelanguage.googleapis.com');
+    const body = JSON.parse(init.body);
+    const part = body.contents[0].parts[0];
+    assert.equal(part.inlineData.mimeType, 'image/png');
+    assert.equal(part.inlineData.data, 'YWJj');
+  });
+
+  it('google adapter passes non-data image_url blocks through as fileData', () => {
+    const req = {
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: 'https://example.com/img.png' } }],
+        },
+      ],
+    };
+    const { init } = buildGoogleRequest(req, 'gemini-2.5-flash', 'k', 'https://generativelanguage.googleapis.com');
+    const body = JSON.parse(init.body);
+    const part = body.contents[0].parts[0];
+    assert.equal(part.fileData.fileUri, 'https://example.com/img.png');
+  });
 });
