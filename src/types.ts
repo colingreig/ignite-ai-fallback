@@ -1,6 +1,6 @@
 /**
  * @module types
- * All public types for @ignite/ai-fallback.
+ * All public types for @ignitemarketing/ai-fallback.
  */
 
 /** Supported LLM providers. */

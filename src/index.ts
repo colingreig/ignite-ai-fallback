@@ -1,12 +1,12 @@
 /**
- * @ignite/ai-fallback
+ * @ignitemarketing/ai-fallback
  *
  * Fetch-based LLM provider fallback with zero runtime dependencies.
  * Works in Node.js 18+, Cloudflare Workers, Deno, and plain .mjs scripts.
  *
  * @example
  * ```ts
- * import { runWithFallback } from '@ignite/ai-fallback';
+ * import { runWithFallback } from '@ignitemarketing/ai-fallback';
  *
  * const result = await runWithFallback(
  *   [

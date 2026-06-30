@@ -1,5 +1,5 @@
 {
-  "name": "@ignite/ai-fallback",
+  "name": "@ignitemarketing/ai-fallback",
   "version": "0.1.0",
   "description": "Fetch-based LLM provider fallback for Node.js, Cloudflare Workers, Deno, and .mjs scripts. Zero runtime dependencies.",
   "type": "module",

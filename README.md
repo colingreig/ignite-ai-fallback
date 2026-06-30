@@ -1,4 +1,4 @@
-# @ignite/ai-fallback
+# @ignitemarketing/ai-fallback
 
 Fetch-based LLM provider fallback with **zero runtime dependencies**.
 
@@ -16,16 +16,16 @@ No `@anthropic-ai/sdk`, no `openai`, no `@ai-sdk/*`. Just `fetch` + TypeScript.
 
 ```bash
 # npm / pnpm / bun
-npm install @ignite/ai-fallback
+npm install @ignitemarketing/ai-fallback
 
 # Deno (JSR — pending scope claim, see below)
-import { runWithFallback } from 'jsr:@ignite/ai-fallback';
+import { runWithFallback } from 'jsr:@ignitemarketing/ai-fallback';
 ```
 
 ## Quick start
 
 ```ts
-import { runWithFallback } from '@ignite/ai-fallback';
+import { runWithFallback } from '@ignitemarketing/ai-fallback';
 
 const result = await runWithFallback(
   [
