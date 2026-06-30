@@ -414,3 +414,49 @@ describe('runWithFallback — CF AI Gateway routing', () => {
     assert.ok(!capturedUrl.includes('gateway.ai.cloudflare.com'), `Should bypass gateway, got: ${capturedUrl}`);
   });
 });
+
+describe('runWithFallback — extraHeaders', () => {
+  it('merges extraHeaders into the request without clobbering adapter auth headers', async () => {
+    let capturedHeaders;
+    const fetchImpl = async (_url, init) => {
+      capturedHeaders = init.headers;
+      return jsonResponse(ANTHROPIC_OK);
+    };
+
+    await runWithFallback(
+      [{ provider: 'anthropic', model: 'claude-sonnet-4-6' }],
+      makeRequest(),
+      {
+        keys: { anthropic: 'secret-key' },
+        extraHeaders: { 'cf-aig-metadata': '{"project":"luxuryexoticrental"}' },
+        fetchImpl,
+      },
+    );
+
+    // Extra header present
+    assert.equal(capturedHeaders['cf-aig-metadata'], '{"project":"luxuryexoticrental"}');
+    // Adapter's own auth header preserved (not clobbered)
+    assert.equal(capturedHeaders['x-api-key'], 'secret-key');
+  });
+
+  it('adapter headers win when extraHeaders collide with them', async () => {
+    let capturedHeaders;
+    const fetchImpl = async (_url, init) => {
+      capturedHeaders = init.headers;
+      return jsonResponse(ANTHROPIC_OK);
+    };
+
+    await runWithFallback(
+      [{ provider: 'anthropic', model: 'claude-sonnet-4-6' }],
+      makeRequest(),
+      {
+        keys: { anthropic: 'secret-key' },
+        // Attempt to override the auth header — adapter must win
+        extraHeaders: { 'x-api-key': 'attacker-value' },
+        fetchImpl,
+      },
+    );
+
+    assert.equal(capturedHeaders['x-api-key'], 'secret-key');
+  });
+});

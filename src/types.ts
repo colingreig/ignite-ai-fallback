@@ -113,4 +113,13 @@ export interface FallbackOptions {
    * Useful for testing without real network calls.
    */
   fetchImpl?: typeof fetch;
+
+  /**
+   * Extra HTTP headers merged into every provider request, after the
+   * adapter's own headers (so adapter auth headers win on collision).
+   * Use for Cloudflare AI Gateway observability tags, e.g.:
+   *   { 'cf-aig-metadata': JSON.stringify({ project: 'luxuryexoticrental' }) }
+   * Harmless to direct providers — unknown headers are ignored.
+   */
+  extraHeaders?: Record<string, string>;
 }

@@ -156,9 +156,15 @@ export async function runWithFallback(
     const { build, parse } = ADAPTERS[step.provider];
     const { url, init } = build(request, step.model, apiKey, baseUrl);
 
+    // Merge caller-supplied extra headers (e.g. CF AI Gateway metadata tags)
+    // UNDER the adapter's own headers, so adapter auth/content-type always win.
+    const headers = opts?.extraHeaders
+      ? { ...opts.extraHeaders, ...(init.headers as Record<string, string>) }
+      : init.headers;
+
     let response: Response;
     try {
-      response = await fetchFn(url, { ...init, signal: opts?.signal });
+      response = await fetchFn(url, { ...init, headers, signal: opts?.signal });
     } catch (err) {
       // Re-throw cancellation immediately
       if (err instanceof Error && err.name === 'AbortError') throw err;

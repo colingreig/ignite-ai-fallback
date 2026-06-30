@@ -1,0 +1,37 @@
+name: Publish to JSR
+
+# Publishes to JSR whenever a v* tag is pushed (e.g. v0.2.0).
+# Requires a one-time link of the JSR package to this GitHub repo:
+#   jsr.io/@ignitemarketing/ai-fallback → Settings → GitHub repository → colingreig/ignite-ai-fallback
+# After that, JSR trusts this workflow via OIDC — no token needed.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for JSR OIDC authentication
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify version matches tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./jsr.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match jsr.json version $PKG" >&2
+            exit 1
+          fi
+      - name: Build & test
+        run: |
+          npm install
+          npm run test:all
+      - name: Publish to JSR
+        run: npx jsr publish
