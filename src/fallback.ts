@@ -24,13 +24,18 @@ const PROVIDER_ENV_KEYS: Record<Provider, string> = {
 /**
  * Direct (non-gateway) base URLs per provider.
  *
- * zai-glm: https://open.bigmodel.cn/api/paas/v4 (OpenAI-compatible; overridable)
+ * zai-glm: https://api.z.ai/api/paas/v4 — z.ai's OpenAI-compatible PAYG endpoint
+ * (Bearer auth, ZAI_API_KEY). Requires a FUNDED z.ai pay-as-you-go account/key.
+ * Override with the ZAI_BASE_URL env var if you move endpoints, e.g. the Coding
+ * Plan path https://api.z.ai/api/coding/paas/v4 (subscription quota, but z.ai's
+ * TOS scopes that plan to coding tools, not app backends). Do NOT use
+ * open.bigmodel.cn (Zhipu China, separate account → error 1113 with a z.ai key).
  */
 const PROVIDER_BASE: Record<Provider, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com/v1',
   google: 'https://generativelanguage.googleapis.com',
-  'zai-glm': 'https://open.bigmodel.cn/api/paas/v4',
+  'zai-glm': 'https://api.z.ai/api/paas/v4',
 };
 
 /**
@@ -79,8 +84,12 @@ function resolveKey(
 }
 
 function getBaseUrl(provider: Provider, gatewayBase?: string): string {
-  // zai-glm always bypasses the CF AI Gateway
-  if (provider === 'zai-glm' || !gatewayBase) {
+  // zai-glm always bypasses the CF AI Gateway; base URL overridable via ZAI_BASE_URL
+  // (e.g. to switch between the PAYG and Coding Plan endpoints without a code change).
+  if (provider === 'zai-glm') {
+    return readEnv('ZAI_BASE_URL') ?? PROVIDER_BASE['zai-glm'];
+  }
+  if (!gatewayBase) {
     return PROVIDER_BASE[provider];
   }
   const slug = GATEWAY_SLUGS[provider];
