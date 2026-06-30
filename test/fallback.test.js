@@ -84,7 +84,7 @@ describe('runWithFallback — first-step success', () => {
 
   it('returns result from zai-glm', async () => {
     const fetchImpl = async (url) => {
-      assert.ok(url.includes('bigmodel.cn'), `expected z.ai URL, got: ${url}`);
+      assert.ok(url.includes('api.z.ai'), `expected z.ai URL, got: ${url}`);
       return jsonResponse(ZAI_OK);
     };
 
@@ -405,12 +405,12 @@ describe('runWithFallback — CF AI Gateway routing', () => {
     };
 
     await runWithFallback(
-      [{ provider: 'zai-glm', model: 'glm-4-plus' }],
+      [{ provider: 'zai-glm', model: 'glm-4.6' }],
       makeRequest(),
       { keys: { 'zai-glm': 'k' }, gatewayBase: GATEWAY, fetchImpl },
     );
 
-    assert.ok(capturedUrl.includes('bigmodel.cn'), `zai-glm should use direct URL, got: ${capturedUrl}`);
+    assert.ok(capturedUrl.includes('api.z.ai'), `zai-glm should use direct URL, got: ${capturedUrl}`);
     assert.ok(!capturedUrl.includes('gateway.ai.cloudflare.com'), `Should bypass gateway, got: ${capturedUrl}`);
   });
 });
@@ -458,5 +458,28 @@ describe('runWithFallback — extraHeaders', () => {
     );
 
     assert.equal(capturedHeaders['x-api-key'], 'secret-key');
+  });
+});
+
+describe('runWithFallback — ZAI_BASE_URL override', () => {
+  it('uses ZAI_BASE_URL env var for the zai-glm base when set', async () => {
+    const prev = process.env.ZAI_BASE_URL;
+    process.env.ZAI_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
+    try {
+      let capturedUrl;
+      const fetchImpl = async (url) => {
+        capturedUrl = url;
+        return jsonResponse(ZAI_OK);
+      };
+      await runWithFallback(
+        [{ provider: 'zai-glm', model: 'glm-4.6' }],
+        makeRequest(),
+        { keys: { 'zai-glm': 'k' }, fetchImpl },
+      );
+      assert.ok(capturedUrl.startsWith('https://api.z.ai/api/coding/paas/v4'), capturedUrl);
+    } finally {
+      if (prev === undefined) delete process.env.ZAI_BASE_URL;
+      else process.env.ZAI_BASE_URL = prev;
+    }
   });
 });
